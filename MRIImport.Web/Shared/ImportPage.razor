@@ -22,11 +22,12 @@
     @* ── Title row ──────────────────────────────────────────────────────── *@
     <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
         <MudText Typo="Typo.h5" Color="Color.Primary">@Handler.ImportName</MudText>
-        <MudIconButton Icon="@Icons.Material.Outlined.Info"
-                       Color="Color.Default"
-                       Size="Size.Small"
-                       Title="Import instructions"
-                       OnClick="ShowInfoDialog" />
+        <MudTooltip Text="Import instructions">
+            <MudIconButton Icon="@Icons.Material.Outlined.Info"
+                           Color="Color.Default"
+                           Size="Size.Small"
+                           OnClick="ShowInfoDialog" />
+        </MudTooltip>
     </MudStack>
 
     <MudDivider Class="mb-4" />
