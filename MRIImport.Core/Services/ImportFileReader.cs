@@ -46,7 +46,13 @@ public class ImportFileReader
         try
         {
             using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-            using var workbook = new XLWorkbook(stream);
+
+            // LoadOptions.RecalculateAllFormulas = false — we read the cached values
+            // that Excel already computed and stored in the file. This avoids
+            // ClosedXML formula-engine crashes on complex/unsupported Excel functions
+            // (ROUND, SUMIF, IF with range references, etc.).
+            var loadOptions = new LoadOptions { RecalculateAllFormulas = false };
+            using var workbook = new XLWorkbook(stream, loadOptions);
 
             // Strict: must have a sheet named "IMPORT"
             var sheet = workbook.Worksheets
@@ -59,12 +65,13 @@ public class ImportFileReader
             if (lastRow < 2)
                 throw new ImportFileException("The IMPORT worksheet contains no data rows.");
 
-            // Build column-index → property-name map from header row
+            // Build column-index -> property-name map from header row.
+            // Header cells are always plain text so GetString() is safe here.
             var headers = new Dictionary<int, string>();
-            var headerRow = sheet.Row(1);
-            for (int col = 1; col <= sheet.LastColumnUsed()!.ColumnNumber(); col++)
+            var lastCol = sheet.LastColumnUsed()!.ColumnNumber();
+            for (int col = 1; col <= lastCol; col++)
             {
-                var header = headerRow.Cell(col).GetString().Trim().ToUpper();
+                var header = sheet.Row(1).Cell(col).GetString().Trim().ToUpper();
                 if (!string.IsNullOrWhiteSpace(header))
                     headers[col] = header;
             }
@@ -72,7 +79,7 @@ public class ImportFileReader
             if (headers.Count == 0)
                 throw new ImportFileException("The IMPORT worksheet header row appears to be empty.");
 
-            // Read data rows
+            // Read data rows using cached values to avoid formula re-evaluation
             for (int row = 2; row <= lastRow; row++)
             {
                 var record = new T { LineNumber = row };
@@ -80,7 +87,7 @@ public class ImportFileReader
 
                 foreach (var (col, propName) in headers)
                 {
-                    var cellValue = sheet.Row(row).Cell(col).GetString().Trim();
+                    var cellValue = GetCellValueSafe(sheet.Row(row).Cell(col)).Trim();
                     if (!string.IsNullOrWhiteSpace(cellValue))
                     {
                         record.SetProperty(propName, cellValue);
@@ -106,6 +113,38 @@ public class ImportFileReader
         }
 
         return list;
+    }
+
+    /// <summary>
+    /// Safely reads a cell value without triggering formula recalculation.
+    /// For formula cells, returns the cached value Excel stored in the file.
+    /// Falls back gracefully to empty string rather than throwing.
+    /// </summary>
+    private static string GetCellValueSafe(IXLCell cell)
+    {
+        try
+        {
+            // For formula cells, CachedValue holds what Excel last calculated.
+            // This is exactly what we want and avoids invoking ClosedXML's
+            // formula engine, which can crash on unsupported/complex functions.
+            if (cell.HasFormula)
+            {
+                var cached = cell.CachedValue;
+                return cached.IsText    ? cached.GetText()
+                     : cached.IsNumber  ? cached.GetNumber().ToString()
+                     : cached.IsBoolean ? cached.GetBoolean().ToString()
+                     : cached.IsBlank   ? string.Empty
+                     : cached.ToString() ?? string.Empty;
+            }
+
+            // Plain value cell — safe to call GetString() directly
+            return cell.GetString();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not read cell {Address} — treating as empty", cell.Address);
+            return string.Empty;
+        }
     }
 
     // ── CSV ──────────────────────────────────────────────────────────────────
