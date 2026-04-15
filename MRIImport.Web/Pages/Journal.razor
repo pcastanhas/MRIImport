@@ -1,0 +1,11 @@
+@page "/journal"
+@inject MRIImport.Core.Handlers.JournalHandler Handler
+
+@* ══════════════════════════════════════════════════════════════════════════
+   Journal import page.
+   All UI is handled by the shared ImportPage component.
+   This file is intentionally minimal — it only wires the handler.
+   Called from MRI as: /journal?db=BCP_PROD&UserId=jsmith
+   ══════════════════════════════════════════════════════════════════════════ *@
+
+<ImportPage Handler="@Handler" />

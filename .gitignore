@@ -1,0 +1,38 @@
+## .NET gitignore
+
+# Build output
+bin/
+obj/
+out/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# Publish output
+publish/
+
+# Logs (runtime generated)
+logs/
+*.log
+
+# User secrets
+**/appsettings.Development.json
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
+# OS
+.DS_Store
+Thumbs.db

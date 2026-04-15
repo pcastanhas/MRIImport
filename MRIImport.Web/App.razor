@@ -1,0 +1,12 @@
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MRIImport.Web.Shared.MainLayout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <PageTitle>Page Not Found</PageTitle>
+        <MudText Typo="Typo.h5" Class="pa-4">
+            The requested import page was not found. Please check the URL provided by MRI.
+        </MudText>
+    </NotFound>
+</Router>

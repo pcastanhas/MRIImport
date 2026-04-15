@@ -1,0 +1,354 @@
+@using MRIImport.Core.Interfaces
+@using MRIImport.Core.Models
+@using MRIImport.Core.Services
+@inject IConfiguration Configuration
+@inject FileService FileService
+@inject NavigationManager NavManager
+@inject IDialogService DialogService
+
+@* ════════════════════════════════════════════════════════════════════════════
+   ImportPage — shared component used by every import page.
+
+   Parameters:
+     Handler        — the IImportHandler for this import type
+     ChildContent   — optional render fragment for page-specific fields
+                      (e.g. CMMisc's batch date and description inputs)
+   ════════════════════════════════════════════════════════════════════════════ *@
+
+<PageTitle>@Handler.ImportName</PageTitle>
+
+<MudPaper Elevation="2" Class="pa-6 mb-4" Style="border-radius:8px;">
+
+    @* ── Title row ──────────────────────────────────────────────────────── *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4">
+        <MudText Typo="Typo.h5" Color="Color.Primary">@Handler.ImportName</MudText>
+        <MudIconButton Icon="@Icons.Material.Outlined.Info"
+                       Color="Color.Default"
+                       Size="Size.Small"
+                       Title="Import instructions"
+                       OnClick="ShowInfoDialog" />
+    </MudStack>
+
+    <MudDivider Class="mb-4" />
+
+    @* ── Page-specific fields (injected by child pages, e.g. CMMisc) ───── *@
+    @if (ChildContent is not null)
+    {
+        <div class="mb-4">
+            @ChildContent
+        </div>
+    }
+
+    @* ── File selector ───────────────────────────────────────────────────── *@
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-2">
+        <MudText Typo="Typo.body1" Style="min-width:80px;">Select file:</MudText>
+
+        <MudFileUpload T="IBrowserFile"
+                       FilesChanged="OnFileSelected"
+                       Accept=".xlsx,.xls,.csv"
+                       MaximumFileCount="1">
+            <ActivatorContent>
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.AttachFile"
+                           Size="Size.Small">
+                    Choose File
+                </MudButton>
+            </ActivatorContent>
+        </MudFileUpload>
+
+        @if (_selectedFile is not null)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @_selectedFile.Name
+                <MudText Inline="true" Typo="Typo.caption" Color="Color.Tertiary">
+                    (@FormatFileSize(_selectedFile.Size))
+                </MudText>
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Style="font-style:italic;">
+                No file chosen
+            </MudText>
+        }
+    </MudStack>
+
+    @* ── Template download link ──────────────────────────────────────────── *@
+    @if (!string.IsNullOrWhiteSpace(Handler.TemplateFileName))
+    {
+        <MudLink Href="@($"templates/{Handler.TemplateFileName}")"
+                 Target="_blank"
+                 Typo="Typo.body2"
+                 Class="mb-1 d-block">
+            <MudIcon Icon="@Icons.Material.Outlined.Download" Size="Size.Small" Class="mr-1" />
+            Download Template and Instructions
+        </MudLink>
+    }
+
+</MudPaper>
+
+@* ── Import button — outside the card, matching original layout ─────────── *@
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Class="mb-4">
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Upload"
+               Disabled="@(!CanImport)"
+               OnClick="RunImportAsync"
+               Size="Size.Medium">
+        @if (_isImporting)
+        {
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            <span>Importing…</span>
+        }
+        else
+        {
+            <span>Import File</span>
+        }
+    </MudButton>
+
+    @if (_isImporting)
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Processing @_selectedFile?.Name — please wait…
+        </MudText>
+    }
+</MudStack>
+
+@* ── Result alerts ───────────────────────────────────────────────────────── *@
+@if (_result is not null)
+{
+    @if (_result.Success)
+    {
+        <MudAlert Severity="Severity.Success"
+                  Variant="Variant.Filled"
+                  Icon="@Icons.Material.Filled.CheckCircle"
+                  Class="mb-3"
+                  ShowCloseIcon="true"
+                  CloseIconClicked="ClearResult">
+            @_result.Message
+        </MudAlert>
+    }
+    else if (_result.ValidationErrors.Count > 0)
+    {
+        @* Validation failure — show alert + per-row error table *@
+        <MudAlert Severity="Severity.Warning"
+                  Variant="Variant.Filled"
+                  Icon="@Icons.Material.Filled.Warning"
+                  Class="mb-3"
+                  ShowCloseIcon="true"
+                  CloseIconClicked="ClearResult">
+            @_result.Message
+        </MudAlert>
+
+        <MudPaper Elevation="1" Class="pa-4" Style="border-radius:8px;">
+            <MudText Typo="Typo.subtitle2" Class="mb-2" Color="Color.Warning">
+                <MudIcon Icon="@Icons.Material.Filled.ErrorOutline" Size="Size.Small" Class="mr-1" />
+                Validation Errors — @_result.ValidationErrors.Count error(s) found
+            </MudText>
+
+            <MudSimpleTable Hover="true" Dense="true" Style="font-size:0.82rem;">
+                <thead>
+                    <tr>
+                        <th style="width:90px;">Row</th>
+                        <th>Error</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var err in _result.ValidationErrors)
+                    {
+                        <tr>
+                            <td>
+                                @if (err.LineNumber > 0)
+                                {
+                                    <MudChip T="string" Size="Size.Small"
+                                             Color="Color.Warning"
+                                             Variant="Variant.Outlined">
+                                        Row @err.LineNumber
+                                    </MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small"
+                                             Color="Color.Warning"
+                                             Variant="Variant.Outlined">
+                                        File
+                                    </MudChip>
+                                }
+                            </td>
+                            <td>@err.Message</td>
+                        </tr>
+                    }
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
+    }
+    else
+    {
+        @* Non-validation failure (DB error, file read error, etc.) *@
+        <MudAlert Severity="Severity.Error"
+                  Variant="Variant.Filled"
+                  Icon="@Icons.Material.Filled.Error"
+                  Class="mb-3"
+                  ShowCloseIcon="true"
+                  CloseIconClicked="ClearResult">
+            @_result.Message
+        </MudAlert>
+
+        @if (!string.IsNullOrWhiteSpace(_result.TechnicalDetail))
+        {
+            <MudExpansionPanels Class="mb-3">
+                <MudExpansionPanel Text="Technical Details" TitleClass="mud-text-secondary">
+                    <MudText Typo="Typo.caption"
+                             Style="font-family:monospace; white-space:pre-wrap; word-break:break-all;">
+                        @_result.TechnicalDetail
+                    </MudText>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+    }
+}
+
+@* ── Server / session info footer ───────────────────────────────────────── *@
+<MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-6">
+    Server: @_serverName &nbsp;|&nbsp; User: @_userId &nbsp;|&nbsp; DB: @_db
+</MudText>
+
+@code {
+
+    // ── Parameters ────────────────────────────────────────────────────────────
+
+    /// <summary>The import handler provided by the hosting page.</summary>
+    [Parameter, EditorRequired]
+    public IImportHandler Handler { get; set; } = default!;
+
+    /// <summary>
+    /// Optional render fragment for page-specific inputs (e.g. batch date).
+    /// The hosting page binds these values and passes them into ExtraParameters
+    /// via the GetExtraParameters callback.
+    /// </summary>
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>
+    /// Callback invoked just before import executes, allowing the hosting page
+    /// to supply any extra parameters (batch date, flags, etc.) into the context.
+    /// Return an empty dictionary if no extras are needed.
+    /// </summary>
+    [Parameter]
+    public Func<Dictionary<string, string>>? GetExtraParameters { get; set; }
+
+    // ── Private state ─────────────────────────────────────────────────────────
+
+    private IBrowserFile?  _selectedFile;
+    private ImportResult?  _result;
+    private bool           _isImporting;
+    private string         _userId     = string.Empty;
+    private string         _db         = string.Empty;
+    private string         _serverName = System.Net.Dns.GetHostName();
+
+    private bool CanImport => _selectedFile is not null && !_isImporting;
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    protected override void OnInitialized()
+    {
+        // Parse query string parameters passed in from MRI
+        var uri   = new Uri(NavManager.Uri);
+        var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+
+        query.TryGetValue("UserId", out var userId);
+        query.TryGetValue("db",     out var db);
+
+        _userId = userId.FirstOrDefault() ?? string.Empty;
+        _db     = db.FirstOrDefault()     ?? string.Empty;
+    }
+
+    // ── Event handlers ────────────────────────────────────────────────────────
+
+    private void OnFileSelected(IBrowserFile? file)
+    {
+        _selectedFile = file;
+        _result       = null; // clear previous result when a new file is chosen
+    }
+
+    private void ClearResult() => _result = null;
+
+    private async Task RunImportAsync()
+    {
+        if (_selectedFile is null) return;
+
+        _isImporting = true;
+        _result      = null;
+        StateHasChanged();
+
+        try
+        {
+            // Resolve connection string from the db query parameter
+            var connectionString = Configuration.GetConnectionString(_db)
+                                ?? Configuration.GetConnectionString("DEFAULT")
+                                ?? throw new InvalidOperationException(
+                                    $"No connection string found for database '{_db}'.");
+
+            // Save file to UNC share (audit copy)
+            string savedPath;
+            await using (var stream = _selectedFile.OpenReadStream(maxAllowedSize: 50 * 1024 * 1024)) // 50 MB
+            {
+                savedPath = await FileService.SaveAsync(stream, _selectedFile.Name);
+            }
+
+            // Build context
+            var extras = GetExtraParameters?.Invoke() ?? new Dictionary<string, string>();
+            var context = new ImportContext
+            {
+                FilePath         = savedPath,
+                OriginalFileName = _selectedFile.Name,
+                UserId           = _userId,
+                ConnectionString = connectionString,
+                ExtraParameters  = extras
+            };
+
+            // Delegate to the handler — all import-specific logic lives there
+            _result = await Handler.ExecuteAsync(context);
+        }
+        catch (Exception ex)
+        {
+            Serilog.Log.Error(ex, "Unexpected error during import of {File}", _selectedFile.Name);
+            _result = ImportResult.Failed(
+                "An unexpected error occurred during the import.",
+                ex.ToString());
+        }
+        finally
+        {
+            _isImporting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ShowInfoDialog()
+    {
+        var parameters = new DialogParameters<InfoDialog>
+        {
+            { x => x.Title,      Handler.ImportName },
+            { x => x.Paragraphs, Handler.InfoText.ToList() }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        await DialogService.ShowAsync<InfoDialog>(Handler.ImportName, parameters, options);
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private static string FormatFileSize(long bytes) => bytes switch
+    {
+        < 1024             => $"{bytes} B",
+        < 1024 * 1024      => $"{bytes / 1024.0:F1} KB",
+        _                  => $"{bytes / (1024.0 * 1024):F1} MB"
+    };
+}

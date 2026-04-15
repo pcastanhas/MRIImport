@@ -1,0 +1,27 @@
+@page "/budget"
+@inject MRIImport.Core.Handlers.BudgetHandler Handler
+
+@* ══════════════════════════════════════════════════════════════════════════
+   Budget import page.
+   Adds one page-specific control: the "Update if exists" checkbox.
+   The checkbox value is passed to the handler via GetExtraParameters.
+   Called from MRI as: /budget?db=BCP_PROD&UserId=jsmith
+   ══════════════════════════════════════════════════════════════════════════ *@
+
+<ImportPage Handler="@Handler" GetExtraParameters="@GetExtras">
+    <ChildContent>
+        <MudCheckBox @bind-Value="_updateIfExists"
+                     Label="Update budget if it already exists (delete and re-insert)"
+                     Color="Color.Primary"
+                     Size="Size.Small" />
+    </ChildContent>
+</ImportPage>
+
+@code {
+    private bool _updateIfExists;
+
+    private Dictionary<string, string> GetExtras() => new()
+    {
+        ["updateIfExists"] = _updateIfExists.ToString()
+    };
+}

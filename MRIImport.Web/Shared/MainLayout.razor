@@ -1,0 +1,45 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="_theme" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Large" Class="py-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code {
+    // Clean, modern theme that fits inside an MRI iframe
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary        = "#1976D2",   // MUI blue — close to existing app's blue
+            PrimaryDarken  = "#1565C0",
+            PrimaryLighten = "#42A5F5",
+            Secondary      = "#455A64",
+            AppbarBackground = "#1976D2",
+            Background     = "#F5F7FA",
+            Surface        = "#FFFFFF",
+            TextPrimary    = "#212121",
+            TextSecondary  = "#616161",
+        },
+        Typography = new Typography
+        {
+            Default = new DefaultTypography
+            {
+                FontFamily = ["Roboto", "Helvetica", "Arial", "sans-serif"],
+                FontSize   = "0.875rem",
+            },
+            H5 = new H5Typography
+            {
+                FontSize   = "1.25rem",
+                FontWeight = "600",
+            }
+        }
+    };
+}

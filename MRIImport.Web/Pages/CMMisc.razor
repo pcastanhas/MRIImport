@@ -1,0 +1,52 @@
+@page "/cmmisc"
+@inject MRIImport.Core.Handlers.CmMiscHandler Handler
+
+@* ══════════════════════════════════════════════════════════════════════════
+   CMMisc (Tenant Charges) import page.
+   Adds two page-specific fields: batch date and batch description.
+   Both are required and validated client-side before enabling Import.
+   Values are passed to the handler via GetExtraParameters.
+   Called from MRI as: /cmmisc?db=BCP_PROD&UserId=jsmith
+   ══════════════════════════════════════════════════════════════════════════ *@
+
+<ImportPage Handler="@Handler" GetExtraParameters="@GetExtras">
+    <ChildContent>
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_batchDescription"
+                              Label="Batch Description"
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Outlined.Description"
+                              Required="true"
+                              RequiredError="Batch description is required."
+                              MaxLength="50"
+                              HelperText="A short description for this charge batch"
+                              Immediate="true" />
+            </MudItem>
+
+            <MudItem xs="12" sm="4">
+                <MudDatePicker @bind-Date="_batchDate"
+                               Label="Batch Date"
+                               Variant="Variant.Outlined"
+                               Adornment="Adornment.Start"
+                               AdornmentIcon="@Icons.Material.Outlined.CalendarToday"
+                               Required="true"
+                               RequiredError="Batch date is required."
+                               DateFormat="MM/dd/yyyy"
+                               HelperText="The posting date for this batch" />
+            </MudItem>
+        </MudGrid>
+    </ChildContent>
+</ImportPage>
+
+@code {
+    private string?   _batchDescription;
+    private DateTime? _batchDate = DateTime.Today;
+
+    private Dictionary<string, string> GetExtras() => new()
+    {
+        ["batchDescription"] = _batchDescription ?? string.Empty,
+        ["batchDate"]        = _batchDate?.ToString("yyyy-MM-dd") ?? string.Empty
+    };
+}

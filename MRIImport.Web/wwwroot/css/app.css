@@ -1,0 +1,45 @@
+/* MRIImport — minimal custom styles
+   MudBlazor handles the heavy lifting; this file only patches
+   iframe-specific concerns and minor tweaks. */
+
+html, body {
+    font-family: 'Roboto', Helvetica, Arial, sans-serif;
+    background-color: #F5F7FA;
+    margin: 0;
+    padding: 0;
+    /* Prevent scroll bars appearing inside the MRI iframe unnecessarily */
+    overflow-x: hidden;
+}
+
+/* Tone down MudContainer top padding when running in a tight iframe */
+.mud-container {
+    padding-top: 16px !important;
+    padding-bottom: 16px !important;
+}
+
+/* Error table: zebra stripe for readability */
+.mud-table tbody tr:nth-child(even) {
+    background-color: #FFF8E1;
+}
+
+/* Blazor error UI — shown on unhandled circuit errors */
+#blazor-error-ui {
+    background: #FFF3CD;
+    border: 1px solid #FFECB5;
+    border-radius: 4px;
+    bottom: 0;
+    box-shadow: 0 -2px 4px rgba(0,0,0,.15);
+    display: none;
+    left: 0;
+    padding: 0.6rem 1.25rem 0.7rem;
+    position: fixed;
+    width: 100%;
+    z-index: 1000;
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
+}
