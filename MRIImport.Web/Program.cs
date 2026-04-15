@@ -34,6 +34,7 @@ try
     builder.Services.AddTransient<JournalHandler>();
     builder.Services.AddTransient<BudgetHandler>();
     builder.Services.AddTransient<CmMiscHandler>();
+    builder.Services.AddTransient<CmReccHandler>();
 
     // ── Pipeline ──────────────────────────────────────────────────────────────
     var app = builder.Build();

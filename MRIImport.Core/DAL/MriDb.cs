@@ -387,4 +387,127 @@ public class MriDb
 
         return $"INSERT INTO {prototype.TableName} ({columns}) VALUES ({parameters})";
     }
+
+    // ── CMRECC reference lookups ──────────────────────────────────────────────
+
+    public async Task<List<MRIBuildingWithBillDate>> GetBuildingWithBillDateListAsync()
+    {
+        Log.Debug("GetBuildingWithBillDateListAsync");
+        const string sql = @"
+            SELECT RTRIM(BLDGID)   BLDGID
+                  ,RTRIM(BLDGNAME) BLDGNAME
+                  ,BILLDATE
+            FROM   BLDG (NOLOCK)
+            ORDER  BY BLDGID";
+
+        await using var cn = NewConnection();
+        return (await cn.QueryAsync<MRIBuildingWithBillDate>(sql)).ToList();
+    }
+
+    public async Task<List<MRIRealTaxGroup>> GetRealTaxGroupListAsync()
+    {
+        Log.Debug("GetRealTaxGroupListAsync");
+        const string sql = @"
+            SELECT RTRIM(RTAXGRPID) RTAXGRPID
+                  ,RTRIM(DESCRPTN)  DESCRPTN
+            FROM   RTAXGRP (NOLOCK)
+            ORDER  BY RTAXGRPID";
+
+        await using var cn = NewConnection();
+        return (await cn.QueryAsync<MRIRealTaxGroup>(sql)).ToList();
+    }
+
+    public async Task<List<MRISqftType>> GetSqftTypeListAsync()
+    {
+        Log.Debug("GetSqftTypeListAsync");
+        const string sql = @"
+            SELECT RTRIM(SQFTTYPE) SQFTTYPE
+                  ,RTRIM(DESCRPTN) DESCRPTN
+            FROM   SQTY (NOLOCK)
+            ORDER  BY SQFTTYPE";
+
+        await using var cn = NewConnection();
+        return (await cn.QueryAsync<MRISqftType>(sql)).ToList();
+    }
+
+    // ── CMRECC upload ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// For each imported row:
+    ///   1. UPDATE any currently-active CMRECC charges for the same
+    ///      BLDGID + LEASID + INCCAT to ENDDATE = EFFDATE - 1 day
+    ///   2. INSERT the new CMRECC row
+    /// All rows processed in a single transaction — fully rolls back on any error.
+    /// Returns the count of rows inserted and the count of existing rows ended.
+    /// </summary>
+    public async Task<(int inserted, int ended)> UploadCmReccAsync(
+        List<MRICmRecc> data, string userId)
+    {
+        Log.Information("UploadCmReccAsync: {Count} rows", data.Count);
+
+        var now = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        foreach (var row in data)
+        {
+            row.USERID   = userId;
+            row.LASTDATE = now;
+        }
+
+        await using var cn = NewConnection();
+        await cn.OpenAsync();
+        await using var tx = await cn.BeginTransactionAsync() as SqlTransaction
+            ?? throw new InvalidOperationException("Could not begin transaction.");
+
+        try
+        {
+            int ended = 0;
+
+            // End any currently-active charges that overlap with each incoming row
+            const string endSql = @"
+                UPDATE CMRECC
+                SET    ENDDATE  = DATEADD(day, -1, @EFFDATE)
+                      ,LASTDATE = @LASTDATE
+                      ,USERID   = @USERID
+                WHERE  BLDGID  = @BLDGID
+                AND    LEASID  = @LEASID
+                AND    INCCAT  = @INCCAT
+                AND    EFFDATE <= @EFFDATE
+                AND    (ENDDATE IS NULL OR ENDDATE >= @EFFDATE)";
+
+            foreach (var row in data)
+            {
+                var affected = await cn.ExecuteAsync(endSql, new
+                {
+                    row.EFFDATE,
+                    row.BLDGID,
+                    row.LEASID,
+                    row.INCCAT,
+                    LASTDATE = now,
+                    USERID   = userId
+                }, tx);
+
+                ended += affected;
+                Log.Debug("Ended {Count} overlapping CMRECC rows for {BLDGID}/{LEASID}/{INCCAT}",
+                    affected, row.BLDGID, row.LEASID, row.INCCAT);
+            }
+
+            // INSERT the new rows
+            var insertSql = BuildInsertSql<MRICmRecc>();
+            foreach (var row in data)
+            {
+                Log.Debug("Inserting CMRECC row {Line}", row.LineNumber);
+                await cn.ExecuteAsync(insertSql, row, tx);
+            }
+
+            await tx.CommitAsync();
+            Log.Information("CMRECC upload committed. {Inserted} inserted, {Ended} existing rows ended.",
+                data.Count, ended);
+            return (data.Count, ended);
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+    }
 }
+

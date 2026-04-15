@@ -204,3 +204,66 @@ public class MRICMMisc : MRITableBase
     public string? TRANAMT { get; set; }
     public string? REFNMBR { get; set; }
 }
+
+// ── New lookup models for CMRECC import ──────────────────────────────────────
+
+public class MRIBuildingWithBillDate
+{
+    public string BLDGID   { get; set; } = string.Empty;
+    public string BLDGNAME { get; set; } = string.Empty;
+    public DateTime? BILLDATE { get; set; }
+}
+
+public class MRIRealTaxGroup
+{
+    public string RTAXGRPID { get; set; } = string.Empty;
+    public string DESCRPTN  { get; set; } = string.Empty;
+}
+
+public class MRISqftType
+{
+    public string SQFTTYPE  { get; set; } = string.Empty;
+    public string DESCRPTN  { get; set; } = string.Empty;
+}
+
+// ── CMRECC import model ───────────────────────────────────────────────────────
+
+public class MRICmRecc : MRITableBase
+{
+    public override string TableName => "CMRECC";
+
+    // PK fields
+    public string? BLDGID     { get; set; }
+    public string? LEASID     { get; set; }
+    public string? INCCAT     { get; set; }
+    public string? EFFDATE    { get; set; }
+
+    // Required NOT NULL fields
+    public string? FRQUENCY   { get; set; }
+    public string? MFEXEMPT   { get; set; }
+    public string? CHARGEDAY  { get; set; }
+    public string? ADVANCE    { get; set; }
+    public string? INEFFECT   { get; set; }
+    public string? PROPOSED   { get; set; }
+
+    // Optional fields
+    public string? AMOUNT     { get; set; }
+    public string? BEGMONTH   { get; set; }
+    public string? CATUSAGE   { get; set; }
+    public string? LASTBILL   { get; set; }
+    public string? ADDRID     { get; set; }
+    public string? BYSQFT     { get; set; }
+    public string? SQFTTYPE   { get; set; }
+    public string? LASTDATE   { get; set; }
+    public string? USERID     { get; set; }
+    public string? ENDDATE    { get; set; }
+    public string? MEMOICAT   { get; set; }
+    public string? RTAXGRPID  { get; set; }
+    public string? AUTOJE     { get; set; }
+    public string? CURRCODE   { get; set; }
+    public string? DEPARTMENT { get; set; }
+    public string? ACHFLAG    { get; set; }
+    public string? AUTOEXCEPTION  { get; set; }
+    public string? REVIEWAGREED   { get; set; }
+    public string? NOTE       { get; set; }
+}

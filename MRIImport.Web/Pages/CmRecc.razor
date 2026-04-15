@@ -1,0 +1,10 @@
+@page "/cmrecc"
+@inject MRIImport.Core.Handlers.CmReccHandler Handler
+
+@* ══════════════════════════════════════════════════════════════════════════
+   CMRECC (Recurring Charges) import page.
+   No page-specific fields needed — all inputs come from the import file.
+   Called from MRI as: /cmrecc?db=BCP_PROD&UserId=jsmith
+   ══════════════════════════════════════════════════════════════════════════ *@
+
+<ImportPage Handler="@Handler" />
