@@ -241,14 +241,29 @@ public class MriDb
 
     // ── Budget upload ─────────────────────────────────────────────────────────
 
-    public async Task<int> UploadBudgetAsync(List<MRIBudget> data, string userId, bool updateIfExists)
+    /// <summary>
+    /// Inserts or upserts budget rows depending on <paramref name="updateExisting"/>.
+    ///
+    /// Insert mode  (updateExisting=false):
+    ///   Plain INSERT — fails with a clear error if any PK already exists in the DB.
+    ///
+    /// Upsert mode  (updateExisting=true):
+    ///   SQL MERGE matched on the full PK (ACCTNUM+ENTITYID+DEPARTMENT+BASIS+BUDTYPE+PERIOD).
+    ///   Matched rows are updated (ACTIVITY, LASTDATE, USERID, LOCKED).
+    ///   Unmatched rows are inserted.
+    ///   Returns separate inserted and updated counts via OUTPUT clause.
+    ///
+    /// All rows processed in a single transaction.
+    /// </summary>
+    public async Task<(int inserted, int updated)> UploadBudgetAsync(
+        List<MRIBudget> data, string userId, bool updateExisting)
     {
-        Log.Information("UploadBudgetAsync: {Count} rows, update={Update}", data.Count, updateIfExists);
+        Log.Information("UploadBudgetAsync: {Count} rows, upsert={Upsert}", data.Count, updateExisting);
 
         var now = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
         foreach (var row in data)
         {
-            row.USERID = userId;
+            row.USERID   = userId;
             row.LASTDATE = now;
         }
 
@@ -259,28 +274,63 @@ public class MriDb
 
         try
         {
-            if (updateIfExists)
+            int inserted = 0;
+            int updated  = 0;
+
+            if (updateExisting)
             {
-                const string deleteSql = @"
-                    DELETE BUDGETS
-                    WHERE  PERIOD     = @PERIOD
-                    AND    ENTITYID   = @ENTITYID
-                    AND    DEPARTMENT = @DEPARTMENT
-                    AND    ACCTNUM    = @ACCTNUM
-                    AND    BASIS      = @BASIS
-                    AND    BUDTYPE    = @BUDTYPE";
+                // MERGE upsert — matched on full PK, updates ACTIVITY + audit fields
+                // OUTPUT clause lets us count inserted vs updated rows separately.
+                const string mergeSql = @"
+                    MERGE BUDGETS AS target
+                    USING (SELECT @ACCTNUM    ACCTNUM
+                                 ,@ENTITYID   ENTITYID
+                                 ,@DEPARTMENT DEPARTMENT
+                                 ,@BASIS      BASIS
+                                 ,@BUDTYPE    BUDTYPE
+                                 ,@PERIOD     PERIOD
+                                 ,@ACTIVITY   ACTIVITY
+                                 ,@LASTDATE   LASTDATE
+                                 ,@USERID     USERID
+                                 ,@LOCKED     LOCKED) AS src
+                       ON (    target.ACCTNUM    = src.ACCTNUM
+                           AND target.ENTITYID   = src.ENTITYID
+                           AND target.DEPARTMENT = src.DEPARTMENT
+                           AND target.BASIS      = src.BASIS
+                           AND target.BUDTYPE    = src.BUDTYPE
+                           AND target.PERIOD     = src.PERIOD)
+                    WHEN MATCHED THEN
+                        UPDATE SET ACTIVITY = src.ACTIVITY
+                                  ,LASTDATE = src.LASTDATE
+                                  ,USERID   = src.USERID
+                                  ,LOCKED   = src.LOCKED
+                    WHEN NOT MATCHED THEN
+                        INSERT (PERIOD, ENTITYID, DEPARTMENT, ACCTNUM, BASIS,
+                                BUDTYPE, ACTIVITY, LASTDATE, USERID, LOCKED)
+                        VALUES (src.PERIOD, src.ENTITYID, src.DEPARTMENT, src.ACCTNUM, src.BASIS,
+                                src.BUDTYPE, src.ACTIVITY, src.LASTDATE, src.USERID, src.LOCKED)
+                    OUTPUT $action;";
 
                 foreach (var row in data)
-                    await cn.ExecuteAsync(deleteSql, row, tx);
+                {
+                    var action = await cn.QuerySingleAsync<string>(mergeSql, row, tx);
+                    if (action == "INSERT") inserted++;
+                    else                    updated++;
+                }
+            }
+            else
+            {
+                // Plain INSERT — database PK constraint will catch any duplicates
+                var insertSql = BuildInsertSql<MRIBudget>();
+                foreach (var row in data)
+                    await cn.ExecuteAsync(insertSql, row, tx);
+                inserted = data.Count;
             }
 
-            var insertSql = BuildInsertSql<MRIBudget>();
-            foreach (var row in data)
-                await cn.ExecuteAsync(insertSql, row, tx);
-
             await tx.CommitAsync();
-            Log.Information("Budget upload committed. {Rows} rows.", data.Count);
-            return data.Count;
+            Log.Information("Budget upload committed. {Inserted} inserted, {Updated} updated.",
+                inserted, updated);
+            return (inserted, updated);
         }
         catch
         {

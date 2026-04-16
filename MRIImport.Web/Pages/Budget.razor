@@ -3,25 +3,25 @@
 
 @* ══════════════════════════════════════════════════════════════════════════
    Budget import page.
-   Adds one page-specific control: the "Update if exists" checkbox.
-   The checkbox value is passed to the handler via GetExtraParameters.
+   Page-specific control: "Update existing records" checkbox.
+   When checked, the handler uses SQL MERGE (upsert) instead of plain INSERT.
    Called from MRI as: /budget?db=BCP_PROD&UserId=jsmith
    ══════════════════════════════════════════════════════════════════════════ *@
 
 <ImportPage Handler="@Handler" GetExtraParameters="@GetExtras">
     <ChildContent>
-        <MudCheckBox @bind-Value="_updateIfExists"
-                     Label="Update budget if it already exists (delete and re-insert)"
+        <MudCheckBox @bind-Value="_updateExisting"
+                     Label="Update existing records"
                      Color="Color.Primary"
                      Size="Size.Small" />
     </ChildContent>
 </ImportPage>
 
 @code {
-    private bool _updateIfExists;
+    private bool _updateExisting;
 
     private Dictionary<string, string> GetExtras() => new()
     {
-        ["updateIfExists"] = _updateIfExists.ToString()
+        ["updateExisting"] = _updateExisting.ToString()
     };
 }
